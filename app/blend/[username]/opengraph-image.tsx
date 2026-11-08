@@ -144,7 +144,7 @@ export default async function Image({
   const friendName = friendProfile.display_name || friendProfile.username;
 
   async function fetchWatched(userId: string): Promise<{ blendMovies: BlendMovie[]; nodes: MovieNode[] }> {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_movies")
       .select(
         "tmdb_id, title, year, poster_path, genres, status, my_rating, watched_on, original_language"
@@ -153,7 +153,16 @@ export default async function Image({
       .eq("status", "watched")
       .order("added_at", { ascending: true });
 
-    const rows = (data || []) as PublicMovieRow[];
+    let rows = (data || []) as PublicMovieRow[];
+    if (error || !data) {
+      const { data: fallbackData } = await supabase
+        .from("user_movies")
+        .select("tmdb_id, title, year, poster_path, genres, status, my_rating")
+        .eq("user_id", userId)
+        .eq("status", "watched")
+        .order("added_at", { ascending: true });
+      rows = (fallbackData || []) as PublicMovieRow[];
+    }
 
     const blendMovies: BlendMovie[] = rows.map((row) => ({
       id: row.tmdb_id,

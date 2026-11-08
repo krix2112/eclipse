@@ -208,8 +208,8 @@ export default async function PublicProfilePage({ params }: PageProps) {
     .eq("status", "watched")
     .order("added_at", { ascending: true });
 
-  // Resilient fallback if watched_on or original_language column is not yet migrated in Supabase (42703)
-  if (error && error.code === "42703") {
+  // Resilient fallback if watched_on or original_language column is not yet migrated in Supabase (42703 or PGRST204)
+  if (error) {
     const fallback = await supabase
       .from("user_movies")
       .select(

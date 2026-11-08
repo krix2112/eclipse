@@ -200,7 +200,7 @@ export default async function BlendPage({ params }: PageProps) {
       .eq("status", "watched")
       .order("added_at", { ascending: true });
 
-    if (error && error.code === "42703") {
+    if (error) {
       const fallback = await supabase
         .from("user_movies")
         .select(

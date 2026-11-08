@@ -8,6 +8,37 @@ import {
 } from "@/lib/graph";
 
 /**
+ * Helper to check if an error is due to a missing column in Supabase (Postgres 42703 or PostgREST PGRST204).
+ */
+export function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const err = error as { code?: string; message?: string };
+  const code = String(err.code || "");
+  const msg = String(err.message || "").toLowerCase();
+  return (
+    code === "42703" ||
+    code === "PGRST204" ||
+    msg.includes("column") ||
+    msg.includes("schema cache") ||
+    msg.includes("does not exist") ||
+    msg.includes("watched_on") ||
+    msg.includes("original_language")
+  );
+}
+
+/**
+ * Normalizes date for PostgreSQL DATE column (converts YYYY to YYYY-01-01).
+ */
+export function formatWatchedOnForDb(watchedOn?: string): string | null {
+  if (!watchedOn) return new Date().toISOString().split("T")[0];
+  const trimmed = watchedOn.trim();
+  if (/^\d{4}$/.test(trimmed)) {
+    return `${trimmed}-01-01`;
+  }
+  return trimmed;
+}
+
+/**
  * Loads the user's movie graph from Supabase.
  * Maps columns from user_movies table and deterministically rebuilds all links.
  * All incoming status "root" movies are cleanly migrated to "watched".
@@ -100,7 +131,7 @@ export async function saveMovie(userId: string, node: MovieNode): Promise<void> 
     added_at: new Date(node.addedAt || Date.now()).toISOString(),
     my_rating: node.myRating ?? null,
     my_note: node.myNote ?? null,
-    watched_on: node.watchedOn || new Date().toISOString().split("T")[0],
+    watched_on: formatWatchedOnForDb(node.watchedOn),
     original_language: node.originalLanguage || null,
   };
 
@@ -124,7 +155,7 @@ export async function saveMovie(userId: string, node: MovieNode): Promise<void> 
 
     if (updateError) {
       // If watched_on or original_language column does not exist in DB yet, fallback gracefully
-      if (updateError.code === "42703") {
+      if (isMissingColumnError(updateError)) {
         delete payload.watched_on;
         delete payload.original_language;
         const { error: retryError } = await supabase
@@ -142,7 +173,7 @@ export async function saveMovie(userId: string, node: MovieNode): Promise<void> 
       .insert(payload);
 
     if (insertError) {
-      if (insertError.code === "42703") {
+      if (isMissingColumnError(insertError)) {
         delete payload.watched_on;
         delete payload.original_language;
         const { error: retryError } = await supabase
@@ -186,7 +217,7 @@ export async function updateMovie(
     reason: node.reason || null,
     connects_to_id: node.connectsToId ? Number(node.connectsToId) : null,
     added_at: new Date(node.addedAt || Date.now()).toISOString(),
-    watched_on: node.watchedOn || new Date().toISOString().split("T")[0],
+    watched_on: formatWatchedOnForDb(node.watchedOn),
     original_language: node.originalLanguage || null,
   };
 
@@ -197,7 +228,7 @@ export async function updateMovie(
     .eq("tmdb_id", Number(node.id));
 
   if (error) {
-    if (error.code === "42703") {
+    if (isMissingColumnError(error)) {
       delete payload.watched_on;
       delete payload.original_language;
       const { error: retryError } = await supabase
@@ -246,12 +277,12 @@ export async function updateMovieWatchedOn(
   const { error } = await supabase
     .from("user_movies")
     .update({
-      watched_on: watchedOn,
+      watched_on: formatWatchedOnForDb(watchedOn),
     })
     .eq("user_id", userId)
     .eq("tmdb_id", Number(tmdbId));
 
-  if (error && error.code !== "42703") {
+  if (error && !isMissingColumnError(error)) {
     throw error;
   }
 }
@@ -272,7 +303,7 @@ export async function updateMovieOriginalLanguage(
     .eq("user_id", userId)
     .eq("tmdb_id", Number(tmdbId));
 
-  if (error && error.code !== "42703") {
+  if (error && !isMissingColumnError(error)) {
     console.warn("Failed to update original_language in cloud:", error);
   }
 }

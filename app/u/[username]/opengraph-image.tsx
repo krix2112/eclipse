@@ -97,7 +97,7 @@ export default async function Image({
 
   // 2. Fetch watched movies
   // SECURITY: only select public columns
-  const { data: moviesData } = await supabase
+  const { data: moviesData, error: fetchErr } = await supabase
     .from("user_movies")
     .select(
       "tmdb_id, title, year, poster_path, genres, status, my_rating, watched_on, original_language"
@@ -106,7 +106,17 @@ export default async function Image({
     .eq("status", "watched")
     .order("added_at", { ascending: true });
 
-  const allMovies: MovieRow[] = (moviesData as MovieRow[]) || [];
+  let allMovies: MovieRow[] = (moviesData as MovieRow[]) || [];
+  if (fetchErr || !moviesData) {
+    const { data: fallbackData } = await supabase
+      .from("user_movies")
+      .select("tmdb_id, title, year, poster_path, genres, status, my_rating")
+      .eq("user_id", profile.id)
+      .eq("status", "watched")
+      .order("added_at", { ascending: true });
+    allMovies = (fallbackData as MovieRow[]) || [];
+  }
+
   const movies = allMovies.slice(0, 12);
   const movieCount = allMovies.length;
 

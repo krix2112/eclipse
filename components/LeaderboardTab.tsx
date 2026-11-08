@@ -90,7 +90,7 @@ export default function LeaderboardTab({
         .in("user_id", targetIds)
         .eq("status", "watched");
 
-      if (error && error.code === "42703") {
+      if (error) {
         const fallback = await supabase
           .from("user_movies")
           .select(

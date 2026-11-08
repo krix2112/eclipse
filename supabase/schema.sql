@@ -120,3 +120,4 @@ CREATE POLICY "Users can update their friendship status"
 CREATE POLICY "Users can delete their friendships"
   ON friendships FOR DELETE
   USING (auth.uid() = requester_id OR auth.uid() = addressee_id);
+
